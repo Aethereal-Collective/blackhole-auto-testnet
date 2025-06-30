@@ -1,46 +1,52 @@
-import readline from "readline";
+import fs from "fs";
 import { setTimeout as wait } from "timers/promises";
 import { swapToken } from "./utils/swap.js";
 
-function ask(question) {
-	const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-	return new Promise((resolve) =>
-		rl.question(question, (answer) => {
-			rl.close();
-			resolve(answer);
-		})
-	);
+const privateKeys = fs
+	.readFileSync(".env", "utf-8")
+	.split("\n")
+	.map((line) => line.trim())
+	.filter(Boolean);
+
+const tokens = ["BTC", "SUPER", "USDC"];
+const walletDelayMs = 30 * 1000;
+
+function randomMs(minMinutes, maxMinutes) {
+	const min = minMinutes * 60 * 1000;
+	const max = maxMinutes * 60 * 1000;
+	return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
 async function main() {
-	const input = await ask("⏱️ Enter the interval between swaps (in minutes): ");
-	const intervalMs = parseInt(input) * 60 * 1000;
-
-	if (isNaN(intervalMs) || intervalMs <= 0) {
-		console.error("❌ Invalid interval. Please enter a number greater than 0.");
-		return;
-	}
-
-	console.log(`\n🚀 Starting the swap bot with an interval of ${input} minutes...\n`);
+	console.log(`🚀 Starting swap bot for ${privateKeys.length} accounts...\n`);
 
 	while (true) {
-		const tokens = ["BTC", "SUPER", "USDC"];
 		const token = tokens[Math.floor(Math.random() * tokens.length)];
-		const randomAmount = Math.floor(Math.random() * 5) + 1;
+		const amount = Math.floor(Math.random() * 5) + 1;
 
-		// Swap Functionality
-		console.log(`🔁 Swapping ${randomAmount} BLACK → ${token}`);
-		await swapToken("BLACK", token, String(randomAmount), false);
+		for (const [i, pk] of privateKeys.entries()) {
+			const label = `Account ${i + 1}`;
 
-		console.log(`⏳ Waiting ${input} minutes before next swap...\n`);
-		await wait(intervalMs);
+			try {
+				console.log(`🔁 ${label}: Swapping ${amount} BLACK → ${token}`);
+				await swapToken("BLACK", token, String(amount), false, pk);
 
-		console.log(`🔁 Swapping MAX ${token} → BLACK`);
-		await swapToken(token, "BLACK", "max", true);
+				console.log(`Waiting for ${walletDelayMs / 1000} seconds before next swap...`);
+				await wait(walletDelayMs);
 
-		// Cooldown Cycle
-		console.log(`⏳ Waiting ${input} minutes before the next cycle...\n`);
-		await wait(intervalMs);
+				console.log(`🔁 ${label}: Swapping MAX ${token} → BLACK`);
+				await swapToken(token, "BLACK", "max", true, pk);
+			} catch (err) {
+				console.error(`❌ Error in ${label}:`, err.message || err);
+			}
+
+			console.log(`✅ ${label} done. Waiting for ${walletDelayMs / 1000} seconds before next account...\n`);
+			await wait(walletDelayMs);
+		}
+
+		const cooldown = randomMs(60, 120);
+		console.log(`⏳ All wallets done. Sleeping for ${(cooldown / 60000).toFixed(2)} minutes before next round...\n`);
+		await wait(cooldown);
 	}
 }
 

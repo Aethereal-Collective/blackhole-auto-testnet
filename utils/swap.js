@@ -1,14 +1,8 @@
-// utils/swap.js
 import { createWalletClient, createPublicClient, http, parseUnits, getAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { avalancheFuji } from "viem/chains";
 
 import { CA } from "../config/contract-address.js";
-import { address } from "../config/accounts.js";
-
-const account = privateKeyToAccount(address);
-const walletClient = createWalletClient({ account, chain: avalancheFuji, transport: http() });
-const publicClient = createPublicClient({ chain: avalancheFuji, transport: http() });
 
 const erc20Abi = [
 	{ name: "balanceOf", type: "function", stateMutability: "view", inputs: [{ name: "_owner", type: "address" }], outputs: [{ name: "balance", type: "uint256" }] },
@@ -71,15 +65,17 @@ const ROUTES = {
 	"USDC→BLACK": "0x4080881f17b4c479adcbE55e40b8A61366E278B8",
 };
 
-export async function swapToken(fromToken, toToken, amount, reverse = false) {
+export async function swapToken(fromToken, toToken, amount, reverse = false, privateKey) {
+	const account = privateKeyToAccount(privateKey);
+	const walletClient = createWalletClient({ account, chain: avalancheFuji, transport: http() });
+	const publicClient = createPublicClient({ chain: avalancheFuji, transport: http() });
+
 	const routeKey = `${fromToken}→${toToken}`;
 	const pair = ROUTES[routeKey];
 	if (!pair) {
 		console.error(`❌ No route for ${routeKey}`);
 		return;
 	}
-
-	console.log(CA[fromToken], CA[toToken], pair, account.address);
 
 	const fromAddress = getAddress(CA[fromToken]);
 	const toAddress = getAddress(CA[toToken]);
