@@ -16,7 +16,7 @@ function randomMs(minMinutes, maxMinutes) {
 }
 
 async function main() {
-	const tokens = ["USDC"];
+	const tokens = ["USDC", "SUPER"];
 	const walletDelayMs = 30 * 1000;
 
 	console.log(`🚀 Starting bot for ${privateKeys.length} accounts...\n`);

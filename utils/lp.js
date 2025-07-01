@@ -7,7 +7,7 @@ import { swapToken } from "./swap.js";
 
 const tokenPairs = [
 	["BLACK", "USDC"],
-	// ["BLACK", "SUPER"],
+	["BLACK", "SUPER"],
 ];
 
 const erc20Abi = [
