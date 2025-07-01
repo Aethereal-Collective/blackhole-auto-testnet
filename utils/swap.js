@@ -57,8 +57,8 @@ const routerAbi = [
 
 export async function swapToken(fromToken, toToken, amount, reverse = false, privateKey) {
 	const account = privateKeyToAccount(privateKey);
-	const walletClient = createWalletClient({ account, chain: avalancheFuji, transport: http("https://endpoints.omniatech.io/v1/avax/fuji/public") });
-	const publicClient = createPublicClient({ chain: avalancheFuji, transport: http("https://endpoints.omniatech.io/v1/avax/fuji/public") });
+	const walletClient = createWalletClient({ account, chain: avalancheFuji, transport: http("https://avalanche-fuji.drpc.org") });
+	const publicClient = createPublicClient({ chain: avalancheFuji, transport: http("https://avalanche-fuji.drpc.org") });
 
 	const routeKey = `${fromToken}→${toToken}`;
 	const pair = ROUTES[routeKey];

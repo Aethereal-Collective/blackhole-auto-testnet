@@ -94,11 +94,11 @@ export async function addLiquidityForPair(pk, index) {
 	const walletClient = createWalletClient({
 		account,
 		chain: avalancheFuji,
-		transport: http("https://endpoints.omniatech.io/v1/avax/fuji/public"),
+		transport: http("https://avalanche-fuji.drpc.org"),
 	});
 	const publicClient = createPublicClient({
 		chain: avalancheFuji,
-		transport: http("https://endpoints.omniatech.io/v1/avax/fuji/public"),
+		transport: http("https://avalanche-fuji.drpc.org"),
 	});
 
 	const [tokenAKey, tokenBKey] = tokenPairs[Math.floor(Math.random() * tokenPairs.length)];
