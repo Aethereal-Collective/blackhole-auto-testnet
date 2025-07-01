@@ -1,8 +1,7 @@
 import { createWalletClient, createPublicClient, http, parseUnits, getAddress } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { avalancheFuji } from "viem/chains";
-
-import { CA } from "../config/contract-address.js";
+import { CA, ROUTES } from "../config/contract-address.js";
 
 const erc20Abi = [
 	{ name: "balanceOf", type: "function", stateMutability: "view", inputs: [{ name: "_owner", type: "address" }], outputs: [{ name: "balance", type: "uint256" }] },
@@ -56,15 +55,6 @@ const routerAbi = [
 	},
 ];
 
-const ROUTES = {
-	"BLACK→BTC": "0x1F834DDD43abDd95d8339dcD3121fd6B9e6e08f2",
-	"BTC→BLACK": "0x1F834DDD43abDd95d8339dcD3121fd6B9e6e08f2",
-	"BLACK→SUPER": "0x9C72ccF7fa3E26E9b0cd34Db48D92096Cdd0E69c",
-	"SUPER→BLACK": "0x9C72ccF7fa3E26E9b0cd34Db48D92096Cdd0E69c",
-	"BLACK→USDC": "0x4080881f17b4c479adcbE55e40b8A61366E278B8",
-	"USDC→BLACK": "0x4080881f17b4c479adcbE55e40b8A61366E278B8",
-};
-
 export async function swapToken(fromToken, toToken, amount, reverse = false, privateKey) {
 	const account = privateKeyToAccount(privateKey);
 	const walletClient = createWalletClient({ account, chain: avalancheFuji, transport: http() });
@@ -82,7 +72,12 @@ export async function swapToken(fromToken, toToken, amount, reverse = false, pri
 	const pairAddress = getAddress(pair);
 	const user = getAddress(account.address);
 
-	const decimals = await publicClient.readContract({ address: fromAddress, abi: erc20Abi, functionName: "decimals" });
+	const decimals = await publicClient.readContract({
+		address: fromAddress,
+		abi: erc20Abi,
+		functionName: "decimals",
+	});
+
 	const amountIn = reverse ? await publicClient.readContract({ address: fromAddress, abi: erc20Abi, functionName: "balanceOf", args: [user] }) : parseUnits(amount.toString(), decimals);
 
 	if (amountIn === 0n) {
@@ -90,16 +85,32 @@ export async function swapToken(fromToken, toToken, amount, reverse = false, pri
 		return;
 	}
 
-	const allowance = await publicClient.readContract({ address: fromAddress, abi: erc20Abi, functionName: "allowance", args: [user, CA.BLACKHOLE_ROUTER] });
+	const allowance = await publicClient.readContract({
+		address: fromAddress,
+		abi: erc20Abi,
+		functionName: "allowance",
+		args: [user, CA.BLACKHOLE_ROUTER],
+	});
+
 	if (allowance < amountIn) {
-		await walletClient.writeContract({
-			address: fromAddress,
-			abi: erc20Abi,
-			functionName: "approve",
-			args: [CA.BLACKHOLE_ROUTER, parseUnits("1000000", decimals)],
-		});
-		console.log("✅ Approved");
-		await new Promise((r) => setTimeout(r, 4000));
+		try {
+			await walletClient.writeContract({
+				address: fromAddress,
+				abi: erc20Abi,
+				functionName: "approve",
+				args: [CA.BLACKHOLE_ROUTER, parseUnits("1000000", decimals)],
+			});
+			console.log("✅ Approved");
+
+			// Wait 1 block after approve
+			const startBlock = await publicClient.getBlockNumber();
+			while ((await publicClient.getBlockNumber()) <= startBlock) {
+				await new Promise((r) => setTimeout(r, 4000));
+			}
+		} catch (e) {
+			console.error("❌ Approve failed:", e.message);
+			return;
+		}
 	}
 
 	const routes = [
@@ -113,12 +124,53 @@ export async function swapToken(fromToken, toToken, amount, reverse = false, pri
 		},
 	];
 
-	const txHash = await walletClient.writeContract({
-		address: CA.BLACKHOLE_ROUTER,
-		abi: routerAbi,
-		functionName: "swapExactTokensForTokens",
-		args: [amountIn, 0n, routes, user, BigInt(Math.floor(Date.now() / 1000 + 300))],
-	});
+	let amountOutMin = 0n;
+	try {
+		const { result } = await publicClient.simulateContract({
+			address: CA.BLACKHOLE_ROUTER,
+			abi: routerAbi,
+			functionName: "swapExactTokensForTokens",
+			args: [amountIn, 0n, routes, user, BigInt(Math.floor(Date.now() / 1000 + 300))],
+			account: user,
+		});
+		const estimatedOut = result[1];
+		amountOutMin = (estimatedOut * 95n) / 100n;
+		console.log(`📉 EstimatedOut: ${estimatedOut} | MinOut (95%): ${amountOutMin}`);
+	} catch (e) {
+		console.warn("⚠️ Simulate failed (using MinOut = 0n):", e.shortMessage || e.message);
+	}
 
-	console.log(`✅ Swapped ${reverse ? "MAX" : amount} ${fromToken} → ${toToken}. Tx:`, txHash);
+	const deadline = BigInt(Math.floor(Date.now() / 1000 + 300));
+
+	for (let attempt = 1; attempt <= 2; attempt++) {
+		try {
+			const txHash = await walletClient.writeContract({
+				address: CA.BLACKHOLE_ROUTER,
+				abi: routerAbi,
+				functionName: "swapExactTokensForTokens",
+				args: [amountIn, amountOutMin, routes, user, deadline],
+			});
+
+			console.log(`⏳ Waiting for tx to be mined... ${txHash}`);
+
+			const receipt = await publicClient.waitForTransactionReceipt({ hash: txHash, timeout: 60000 });
+
+			const status = receipt.status === "success";
+			console.log(`${status ? "✅" : "❌"} Swapped ${reverse ? "MAX" : amount} ${fromToken} → ${toToken}. Tx: ${txHash} | Status: ${status ? "Success ✅" : "Failed ❌"}`);
+
+			if (!status) {
+				console.error("❌ Transaction reverted:");
+				throw new Error(`Transaction reverted: ${txHash}`);
+			}
+
+			return txHash;
+		} catch (err) {
+			const message = err?.shortMessage || err?.cause?.message || err?.message || JSON.stringify(err);
+			console.error(`❌ Swap error: ${message}`);
+			if (attempt === 1) {
+				console.log("🔁 Retrying swap once after delay...");
+				await new Promise((r) => setTimeout(r, 4000));
+			}
+		}
+	}
 }
