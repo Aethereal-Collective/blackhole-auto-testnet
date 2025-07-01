@@ -90,14 +90,15 @@ const routerAbi = [
 
 export async function addLiquidityForPair(pk, index) {
 	const account = privateKeyToAccount(pk);
+
 	const walletClient = createWalletClient({
 		account,
 		chain: avalancheFuji,
-		transport: http(),
+		transport: http("https://endpoints.omniatech.io/v1/avax/fuji/public"),
 	});
 	const publicClient = createPublicClient({
 		chain: avalancheFuji,
-		transport: http(),
+		transport: http("https://endpoints.omniatech.io/v1/avax/fuji/public"),
 	});
 
 	const [tokenAKey, tokenBKey] = tokenPairs[Math.floor(Math.random() * tokenPairs.length)];
