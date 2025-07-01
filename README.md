@@ -8,6 +8,7 @@ A fully automated bot for Blackhole Router on Avalanche Fuji Testnet.
 
 - ✅ Supports multiple private keys (wallets) from `.env`
 - 🧠 Random swap order and amount (1–5 tokens)
+- ✅ Add liquidity
 - 💤 Includes delay per wallet and cooldown between cycles
 - 👻 Designed to look like human-like, non-bot activity
 
